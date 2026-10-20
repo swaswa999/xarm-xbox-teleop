@@ -1,0 +1,154 @@
+xArm 6 Xbox controls
+Robot: 192.168.2.205
+
+Run "Setup xArm Xbox.command" once on a new checkout.
+Open "Start xArm Xbox.command". The controls start disarmed.
+The XARM_IP environment variable overrides the default address in the launchers.
+For a controller-only check, open "Check Xbox Controller.command".
+The input check does not connect to the robot.
+
+Controls
+  Menu / keyboard E     Enable arm with all motion controls released
+  Y / keyboard G        Enable gripper with all motion controls centered
+  Left stick            X/Y translation (forward +X; left +Y)
+  Right stick           RX/RY rotation (right +RX; up +RY)
+  LB / RB bumpers       Z- / Z+ (lower / raise, 25 percent slower)
+  LT / RT triggers      RZ- / RZ+
+  Hold X                Open gripper
+  Hold B                Close gripper
+  Hold R3               Precision speed, 20 percent (subject to SDK minimum)
+  View / Space          Stop and disarm
+  Escape / Q            Close
+
+After Menu enables the arm, use motion controls directly; no A/L3 hold is needed.
+A and L3 have no action. R3 means pressing the right stick inward.
+Center sticks and release bumpers/triggers to decelerate the arm to a stop.
+
+Translate, rotate, and operate the gripper separately. Conflicting control
+groups stop movement. Translation holds orientation. Rotation holds TCP position
+and rotates around the base axes.
+Simultaneous opposing bumpers, triggers, or gripper buttons cancel.
+Releasing a gripper input
+prevents new increments; its already-issued 20-pulse increment may finish.
+Xbox gripper speed is now 1000 (previously 100), with 20-pulse steps (previously
+5). Feedback must confirm progress before another step is sent; targets do not
+accumulate. These settings increase opening/closing speed without changing
+gripping force. They do not imply a measured tenfold increase in travel speed.
+
+Motion
+The default maximum is 230 mm/s, matching Studio's documented manual jog
+maximum. Stick displacement provides variable speed, with a deadzone and finer
+response near center. Lower controller/reduced-mode limits take precedence.
+Z velocity is multiplied by 0.75, giving a Z-only maximum of 172.5 mm/s.
+X/Y and rotation speed settings are unchanged. For combined X/Y/Z input, only
+the normalized Z component is reduced. R3 precision scales the result further.
+Motion uses the controller's mode-7 online trajectory planner with up to
+1000 mm/s^2 planner acceleration. Pure rotation uses planner speed 50 and
+acceleration 1000, capped by controller limits and scaled down with the
+translation speed cap in reduced mode. These are Cartesian planner parameters,
+not an angular velocity guarantee. is_radian applies to the orientation target
+only. The earlier radian-valued planner parameters made rotations too slow.
+Rotation targets remain bounded to an 8-degree change from measured orientation.
+The gripper's READY/OFF status is always visible; Y enables it without moving it.
+Mode-7 planner and axis-angle reference:
+https://github.com/xArm-Developer/xarm_ros2/blob/humble/xarm_api/ReadMe.md
+No collision, payload, TCP, reduced-mode,
+jerk, or other saved safety settings are changed.
+
+Feedback
+The detailed report stream on this robot was measured at one report every
+200 ms. The previous 150 ms cutoff therefore caused false stale-feedback stops.
+Detailed reports now expire after 500 ms. A separate read-only connection to
+the real-time report port supplies pose/mode/state at about 100 Hz and retains
+the 150 ms cutoff. Either stream failing disarms the app.
+The fast pose was compared against the SDK's pose getter while stationary.
+Enable waits for fresh standby confirmation from both streams, including the
+SDK's cached mode/state. This prevents the slower rich report from falsely
+disarming a successful enable while it still contains the previous mode.
+Window heartbeat (100 ms) and native controller sample age (150 ms) are
+checked separately. The former used to incorrectly reuse the native sample's
+timestamp and apply the tighter keyboard timeout to it. Either actual timeout
+still disarms and requires explicit Menu enable. Timeout messages name the
+stalled source and show its age.
+
+The application is an adaptation of UFACTORY's published Xbox example,
+not an official Studio plugin. The upstream reference revision is
+d149f5a5a4e7e8b6d82561fd64bd0dfd240bf5bf.
+Source: https://github.com/xArm-Developer/ufactory_teleop
+Original motion approach: xbox_teleop/uf_robot_xbox_teleop.py
+Its BSD notice is retained in LICENSES/ufactory-teleop-BSD-3-Clause.txt.
+
+The upstream startup wrapper is not executed: it enables the arm, clears
+errors, moves to a preset pose, and changes collision settings. This adapter
+uses the reviewed read-only connection helper and explicit user enable instead.
+
+macOS input
+The connected Microsoft USB controller is read through Apple's GameController
+framework. SDL in the installed pygame build did not enumerate this device.
+xbox-support/controller_bridge.swift is a read-only helper that publishes
+controller snapshots locally to the Python app. It has no robot/network code.
+The launcher builds the helper when it is missing or its source is newer.
+
+Stops and limits
+Use only one active control application at a time. Close the keyboard window
+before using Xbox controls, and stop using Studio motion buttons while Xbox
+control is enabled. A local file lock prevents both local teleop windows from
+starting together. Changes to robot mode/state disarm this controller.
+
+Focus loss, controller disconnect, stale input/feedback, robot faults, or the
+stop button disarm control. Returning focus or reconnecting does not enable it.
+Ordinary motion-control release requests the controller's deceleration stop.
+Switching between translation and rotation waits for deceleration to finish.
+This controller was observed reporting state 5 after deceleration in mode 7;
+state 4 is also handled. The app keeps its
+session enabled only when this follows its own acknowledged release stop.
+Center motion controls, then give a new held input to move again; Menu is not
+needed between moves.
+Before restoring standby, the app checks current faults, mode, state, queue,
+input freshness, and both report streams. It waits for a fresh settings report
+and rejects changes to TCP offset, payload, base offset, and collision sensitivity.
+It does not call fault-clearing or servo-enable routines to resume.
+Unexpected stops, faults, focus loss, and View/Space cancel
+this permission and still require explicit Menu enable.
+
+Small analog updates do not request a stop. A/L3 presses and releases have
+no effect on motion. View/Space remains the stop-and-disarm control.
+
+Mode 7 has no velocity-command expiration. Targets are bounded to 60 mm from
+the last reported position; rotation targets are bounded to an 8-degree
+relative change in orientation. If the
+whole host/process/network fails, the robot may complete its last target;
+these are target offsets, not guaranteed emergency stopping distances.
+Software controls are not a safety-rated stop. Keep the physical E-stop ready.
+
+Validation
+112 offline tests cover the keyboard and Xbox paths, including bounded targets,
+base-frame rotations, native input validation, stale/disconnected input,
+both report streams, stop priority, ownership, gripper handling, and controller
+limits. Regression tests model both state-6-to-state-4 and observed state-6-to-state-5 transitions, repeat
+move/release/move without Menu, and verify that faults, unexpected stops,
+lost focus, cancellation during resume, and missing standby confirmation do
+not resume movement. The UI startup/exit was tested with
+robot networking blocked. During operator testing on 2026-10-20, feedback
+confirmed orientation changes from the right stick and both LT/RT triggers.
+Gripper setup was acknowledged, closing changed its position from about 208
+to 189 pulses, and opening increased it again to 202 pulses. No autonomous
+motion test was issued.
+The attached Microsoft USB controller was verified through Apple's native
+interface: left/right sticks, left/right triggers, RB, LB, X, B, Menu, and View
+all produced input during the operator's earlier input-only check.
+The live controls are opened disarmed; startup does not command movement.
+
+During subsequent operator testing on 2026-10-20, the live application logged
+repeated move/release/resume cycles using sticks, bumpers, and triggers.
+The robot returned state 5 after the app's deceleration command; returning to
+standby for the next held input succeeded without the previous unexpected
+disarm. The A/L3 hold requirement was subsequently removed at the operator's
+request. Direct-input operation, neutral startup, release-to-stop, and existing
+fault/disconnect/focus protections are covered by offline tests.
+R3 still needs operator verification. These were operator-initiated movements,
+not automated test moves.
+
+Motion documentation:
+https://docs.usermanual.ufactory.cc/user_manual/ufactoryStudio/10.motion_mode_and_state.html
+https://github.com/xArm-Developer/xArm-Python-SDK/blob/master/xarm/wrapper/xarm_api.py

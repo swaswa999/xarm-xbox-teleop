@@ -1,0 +1,19 @@
+# Local runtimes, compiled helpers and Python caches
+xarm-venv/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+xbox-support/controller_bridge
+xbox-support/probe_controller
+
+# Local history, diagnostics and machine-specific files
+.local-archive/
+.xarm-control.lock
+.DS_Store
+*.log
+.env
+.env.*
+!.env.example
+*.pem
+*.key
