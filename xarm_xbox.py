@@ -162,7 +162,7 @@ class Pad:
     @property
     def motion_centered(self):
         return (not any(self.xyz + self.rxyz) and not self.grip
-                and not self.buttons & {'x', 'b', 'lb', 'rb', 'lt', 'rt'})
+                and not self.buttons & {'x', 'b', 'lb', 'rb', 'lt', 'rt', 'dleft', 'dright'})
 
     @property
     def neutral(self):
@@ -208,6 +208,7 @@ class XboxTeleop(Teleop):
         self.robot_ip = robot_ip
         self.feedback = feedback
         self.pad = Pad()
+        self.drill = None
         self.speed = MAX_SPEED
         self.acceleration = MAX_ACCELERATION
         self.moving = False
@@ -230,6 +231,8 @@ class XboxTeleop(Teleop):
             # of receipt. Do not apply the window's 100 ms limit to a pad sample
             # that is still inside the controller's 150 ms freshness limit.
             self.input = Input(frozenset(keys), pad.focused, self.clock())
+        if self.drill:
+            self.drill.publish(pad)
         self.wake.set()
 
     def require_input(self):
@@ -384,6 +387,8 @@ class XboxTeleop(Teleop):
             self.last_grip_log = self.clock()
 
     def stop(self, reason="Stopped. Release controls, then press Menu / E."):
+        if self.drill:
+            self.drill.disarm()
         print("Teleop:", reason, flush=True)
         self.release_stop = None
         super().stop(reason)
@@ -499,6 +504,9 @@ class XboxTeleop(Teleop):
             self.require_input()
             self.health(active=True)
             self.valid(generation)
+            if self.drill and not self.drill.ready:
+                self.message = "Waiting for ID 8 drill. Release all movement controls."
+                return
             pad = self.pad
             if self.neutral_required:
                 if not pad.neutral:
@@ -590,7 +598,16 @@ class XboxTeleop(Teleop):
         finally:
             self._stop_now()
 
+    def close(self):
+        try:
+            super().close()
+        finally:
+            if self.drill:
+                self.drill.close()
+
     def start(self):
+        if self.drill:
+            self.drill.start()
         def run():
             while True:
                 self.wake.clear()
@@ -641,6 +658,7 @@ class PadReader:
             'a': p.CONTROLLER_BUTTON_A, 'y': p.CONTROLLER_BUTTON_Y,
             'lb': p.CONTROLLER_BUTTON_LEFTSHOULDER, 'rb': p.CONTROLLER_BUTTON_RIGHTSHOULDER,
             'l3': p.CONTROLLER_BUTTON_LEFTSTICK, 'r3': p.CONTROLLER_BUTTON_RIGHTSTICK,
+            'dleft': p.CONTROLLER_BUTTON_DPAD_LEFT, 'dright': p.CONTROLLER_BUTTON_DPAD_RIGHT,
         }
         buttons = [name for name, code in mappings.items() if d.get_button(code)]
         # Standardize SDL's downward-positive Y to Apple's upward-positive Y.
@@ -672,7 +690,7 @@ def native_pad(packet, received):
     buttons = packet.get('buttons')
     if (not isinstance(buttons, list)
             or any(type(v) is not str or v not in
-                   ('menu', 'view', 'a', 'b', 'x', 'y', 'lb', 'rb', 'l3', 'r3') for v in buttons)):
+                   ('menu', 'view', 'a', 'b', 'x', 'y', 'lb', 'rb', 'l3', 'r3', 'dleft', 'dright') for v in buttons)):
         raise ValueError("Invalid native controller buttons")
     buttons = frozenset(buttons) | ({'lt'} if axes[4] > 0.15 else set()) \
         | ({'rt'} if axes[5] > 0.15 else set())
@@ -777,13 +795,15 @@ def draw(pg, surface, c, pad, fonts, input_only):
     title, normal, small = fonts
     def label(text, x, y, font=normal, color='#edf4f5'):
         surface.blit(font.render(text, True, color), (x, y))
-    label("xArm 6 · Xbox control", 28, 20, title)
+    has_drill = c is not None and c.drill is not None
+    label("xArm 6 + ID 8 drill" if has_drill else "xArm 6 · Xbox control", 28, 20, title)
     label("INPUT CHECK · Robot disconnected" if input_only
           else f"{c.robot_ip} · Base coordinates · Up to {c.speed:.0f} mm/s",
           28, 65, small, '#a1b4c0')
     label(pad.name[:88], 28, 96, small, '#68d6b4' if pad.connected else '#efbd69')
     label("ENABLED" if c and c.armed else "DISARMED", 28, 133, normal, '#efbd69')
-    label("MENU / E  Enable arm     Y / G  Enable gripper", 245, 137, small)
+    label("MENU / E  Enable arm + drill" if has_drill else
+          "MENU / E  Enable arm     Y / G  Enable gripper", 245, 137, small)
     cards = [
         ("LEFT STICK", "Move X / Y", "Forward = +X · Left = +Y"),
         ("RIGHT STICK", "Rotate RX / RY", "Right = +RX · Up = +RY"),
@@ -798,7 +818,8 @@ def draw(pg, surface, c, pad, fonts, input_only):
         label(key, x+16, y+12, normal, '#68d6b4')
         label(action, x+16, y+43, normal)
         label(note, x+16, y+75, small, '#a1b4c0')
-    label("Hold R3: precision       VIEW / SPACE: stop & disarm",
+    label("D-pad RIGHT / LEFT: drill forward / reverse (hold)" if has_drill else
+          "Hold R3: precision       VIEW / SPACE: stop & disarm",
           28, 545, small, '#efbd69')
     for i, (axis, value) in enumerate(zip(('X', 'Y', 'Z', 'RX', 'RY', 'RZ'), pad.xyz + pad.rxyz)):
         x, y = 28 + (i // 3) * 390, 578 + (i % 3) * 24
@@ -808,12 +829,16 @@ def draw(pg, surface, c, pad, fonts, input_only):
         if value:
             start = x+190 if value > 0 else x+190 + int(150 * value)
             pg.draw.rect(surface, '#68d6b4', (start, y+3, max(1, int(abs(value)*150)), 13))
-    label("Direct controls · no A hold needed", 28, 658, small)
+    label("ID 8 drill · speed 2000" if has_drill else
+          "Direct controls · no A hold needed", 28, 658, small)
     grip_state = "INPUT ONLY" if input_only else ("READY" if c.gripper_ready else "OFF · press Y / G")
     grip_input = ('open' if pad.grip > 0 else 'close') if pad.grip else 'neutral'
     label(f"Gripper: {grip_state} · {grip_input}", 418, 658, small,
           '#68d6b4' if c and c.gripper_ready else '#efbd69')
-    label("Translate, rotate, and grip separately. ESC / Q quits.", 28, 689, small, '#a1b4c0')
+    label(("D-pad input: " + ('forward' if 'dright' in pad.buttons and 'dleft' not in pad.buttons
+                             else 'reverse' if 'dleft' in pad.buttons and 'dright' not in pad.buttons
+                             else 'stopped')) if input_only else c.drill.message if has_drill else
+          "Translate, rotate, and grip separately. ESC / Q quits.", 28, 689, small, '#a1b4c0')
     label("Release controls to stop. Keep the physical E-stop within reach.", 28, 713, small, '#a1b4c0')
     message = ("Input check only. Sticks and buttons cannot move the robot." if input_only
                else c.message)
@@ -884,7 +909,23 @@ def main(argv=None):
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument('--input-only', action='store_true')
     mode.add_argument('--list-controllers', action='store_true')
+    parser.add_argument('--drill-port', help='USB serial path for the standalone ID 8 drill')
+    mode.add_argument('--check-drill', action='store_true', help='Read drill identity only; no motor writes')
     args = parser.parse_args(argv)
+    if args.check_drill:
+        if not args.drill_port:
+            parser.error('--check-drill requires --drill-port')
+        from so101_drill import SerialDrill
+        drill = SerialDrill(args.drill_port)
+        try:
+            drill.open()
+            print(f'Drill ID 8 verified on {args.drill_port}; no writes sent.')
+            return 0
+        except Exception as exc:
+            print(f'Drill check: {exc}')
+            return 1
+        finally:
+            drill.close()
     if args.input_only:
         window(input_only=True)
         return 0
@@ -929,6 +970,13 @@ def main(argv=None):
             raise RuntimeError("No real-time robot feedback.")
         feedback.check()
         controller = XboxTeleop(arm, reports, feedback=feedback, robot_ip=args.ip)
+        if args.drill_port:
+            from so101_drill import DrillController, SerialDrill
+            controller.drill = DrillController(
+                lambda: SerialDrill(args.drill_port),
+                lambda: controller.armed and not controller.stopping and not controller.closed,
+                controller.stop,
+            )
         controller.health()
         print("Xbox controls started DISARMED. No motion or configuration writes at startup.", flush=True)
         def interrupted(*_):

@@ -25,6 +25,8 @@ func emitController() {
         if pad.buttonX.isPressed { buttons.append("x") }
         if pad.buttonA.isPressed { buttons.append("a") }
         if pad.buttonY.isPressed { buttons.append("y") }
+        if pad.dpad.left.isPressed { buttons.append("dleft") }
+        if pad.dpad.right.isPressed { buttons.append("dright") }
         if pad.leftShoulder.isPressed { buttons.append("lb") }
         if pad.rightShoulder.isPressed { buttons.append("rb") }
         if pad.leftThumbstickButton?.isPressed == true { buttons.append("l3") }

@@ -1,3 +1,15 @@
+Combined xArm + ID 8 drill
+Open "Start xArm + Drill.command" for both devices on one Xbox controller.
+Connect only the loose ID 8 drill motor to its USB controller.
+Menu enables both; wait for "Drill ready" before pressing the D-pad.
+Hold D-pad RIGHT = drill forward at 2000; LEFT = reverse at 2000.
+Release = stop drill. Both directions pressed = stop drill.
+View / Space = stop and disarm both. Focus loss also disarms both.
+The existing arm controls below remain the same. Arm + drill can move together.
+The original "Start xArm Xbox.command" runs the arm without the drill.
+Use SO101_DRILL_PORT to override the default USB device path.
+Stop/close the old browser motor panel before using the combined controls.
+
 xArm 6 Xbox controls
 Robot: 192.168.2.205
 

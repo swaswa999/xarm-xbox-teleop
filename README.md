@@ -6,6 +6,58 @@ After enabling the arm, use the sticks and buttons directly—**no A hold is req
 
 ![Xbox control window](docs/xbox-controls.png)
 
+## xArm + SO-101 drill on one Xbox controller
+
+Open **Start xArm + Drill.command** for the xArm 6 plus the standalone
+STS3215 drill motor at **ID 8**. The SO-101 arm joints are not controlled by
+this mode. The existing **Start xArm Xbox.command** still controls only the xArm.
+
+1. Run **Setup xArm Xbox.command** after updating to install the serial dependency
+   and rebuild the native controller reader.
+2. Connect the xArm by Ethernet and the **loose ID 8 drill alone** on its USB
+   controller. Stop/close the browser motor panel before using Xbox control.
+3. Open **Start xArm + Drill.command**. It starts disarmed. Center the sticks,
+   release all movement buttons and the D-pad, then press **Menu**.
+4. Wait for **Drill ready**. Hold **D-pad right** for forward or **D-pad left**
+   for reverse at the existing maximum setting of **2000 velocity units**.
+   Release to stop the drill. Both D-pad buttons together also stop it.
+5. **View / Space** stops and disarms both devices. **Y / G** enables the xArm
+   gripper. The sticks, bumpers, triggers, X/B, and R3 keep their existing mappings.
+
+The arm and drill can run together. Changing drill direction first commands
+zero and pauses for 150 ms. R3 precision affects the arm, not drill speed.
+This is a command setting, not a measured motor RPM.
+
+The drill uses its own serial worker, checks input and window freshness, polls
+motor communication/torque state, and stops if the arm disarms. Drill faults
+also disarm the arm. Focus loss and controller reconnect require Menu again;
+held D-pad input cannot start the drill during enable. The drill connection
+rejects a bus containing any of the usual arm motor IDs 1–7, never renumbers
+motors, and claims exclusive USB access while active. A full process or host
+failure cannot guarantee a drill stop: the servo's velocity mode has no
+command expiry. Keep motor power and the arm's physical stop reachable.
+
+Defaults: xArm `192.168.2.205`, drill `/dev/cu.usbmodem5C821107831`, ID `8`.
+For another USB adapter path:
+
+```sh
+SO101_DRILL_PORT=/dev/cu.usbmodemYOUR_ADAPTER ./"Start xArm + Drill.command"
+```
+
+Read-only connection check (no torque, mode, ID, or motion writes):
+
+```sh
+./xarm-venv/bin/python xarm_xbox.py --check-drill --drill-port /dev/cu.usbmodem5C821107831
+```
+
+**Check Xbox Controller.command** also reads D-pad left/right without connecting
+to either motor controller. The live UI shows the drill status and controls.
+Offline tests cover both devices together; physical combined motion still
+requires operator verification. The read-only drill check must find ID 8
+on its own bus before enabling the combined controls.
+
+![Combined control window, offline preview](docs/xarm-drill-controls.png)
+
 ## Setup on macOS
 
 You need Python 3.12, Apple's Command Line Tools (`xcrun swiftc`), an Xbox controller recognized by macOS, and a network connection to the arm. The current adapter checks for a six-axis arm, firmware 2.5.0 or later, and the pinned SDK version.
@@ -69,7 +121,7 @@ The separate keyboard launcher retains its own settings, including its higher re
 All tests use fake robot objects; they do not operate a physical robot.
 
 ```sh
-./xarm-venv/bin/python -m unittest test_xarm_xbox test_xarm_teleop
+./xarm-venv/bin/python -m unittest test_xarm_xbox test_xarm_teleop test_so101_drill
 ```
 
 The 112 tests cover direct control without A, direction mapping, bounded targets, speed caps, gripper feedback, release/resume transitions, startup feedback timing, watchdogs, and stop priority.
@@ -81,7 +133,8 @@ macOS native input and robot operation were exercised on the original workstatio
 - `xarm_xbox.py`: controller input, motion planning, feedback checks, and UI.
 - `xarm_teleop.py`: shared connection/gripper helpers and the separate keyboard tool.
 - `xbox-support/controller_bridge.swift`: read-only Apple GameController bridge.
-- `test_xarm_*.py`: offline regression tests.
+- `test_xarm_*.py`, `test_so101_drill.py`: offline regression tests.
+- `so101_drill.py`: standalone ID 8 serial driver and independent drill watchdog.
 - `Xbox controls.txt`: detailed operating notes.
 - `THIRD_PARTY_NOTICES.md`: source attribution and retained license notices.
 
