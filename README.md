@@ -9,13 +9,16 @@ After enabling the arm, use the sticks and buttons directly—**no A hold is req
 ## xArm + SO-101 drill on one Xbox controller
 
 Open **Start xArm + Drill.command** for the xArm 6 plus the standalone
-STS3215 drill motor at **ID 8**. The SO-101 arm joints are not controlled by
-this mode. The existing **Start xArm Xbox.command** still controls only the xArm.
+STS3215 drill motor at **ID 8**. The entire SO-101 arm may stay connected on
+the same USB bus: this mode addresses only ID 8 and leaves joint IDs 1–6
+untouched, including their existing torque, positions, and calibration.
+The existing **Start xArm Xbox.command** still controls only the xArm.
 
 1. Run **Setup xArm Xbox.command** after updating to install the serial dependency
    and rebuild the native controller reader.
-2. Connect the xArm by Ethernet and the **loose ID 8 drill alone** on its USB
-   controller. Stop/close the browser motor panel before using Xbox control.
+2. Connect the xArm by Ethernet and the SO-101 USB controller with the **ID 8
+   drill** attached. Joint motors may remain connected. Stop/close other SO-101
+   control applications, including the browser motor panel, before using Xbox.
 3. Open **Start xArm + Drill.command**. It starts disarmed. Center the sticks,
    release all movement buttons and the D-pad, then press **Menu**.
 4. Wait for **Drill ready**. Hold **D-pad right** for forward or **D-pad left**
@@ -32,8 +35,8 @@ The drill uses its own serial worker, checks input and window freshness, polls
 motor communication/torque state, and stops if the arm disarms. Drill faults
 also disarm the arm. Focus loss and controller reconnect require Menu again;
 held D-pad input cannot start the drill during enable. The drill connection
-rejects a bus containing any of the usual arm motor IDs 1–7, never renumbers
-motors, and claims exclusive USB access while active. A full process or host
+requires a healthy motor at ID 8, never renumbers motors or commands joint IDs,
+and claims exclusive USB access while active. A full process or host
 failure cannot guarantee a drill stop: the servo's velocity mode has no
 command expiry. Keep motor power and the arm's physical stop reachable.
 
@@ -54,7 +57,7 @@ Read-only connection check (no torque, mode, ID, or motion writes):
 to either motor controller. The live UI shows the drill status and controls.
 Offline tests cover both devices together; physical combined motion still
 requires operator verification. The read-only drill check must find ID 8
-on its own bus before enabling the combined controls.
+before enabling the combined controls; other connected joint IDs are allowed.
 
 ![Combined control window, offline preview](docs/xarm-drill-controls.png)
 

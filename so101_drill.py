@@ -1,4 +1,4 @@
-"""Optional STS3215 drill on its own USB bus; no SO-101 joint control.
+"""Optional STS3215 drill at ID 8; the SO-101 joints may share its USB bus.
 
 The serial worker is independent of xArm SDK I/O. No serial port opens until
 the operator enables control. A process/host crash cannot guarantee a stop:
@@ -42,10 +42,8 @@ class SerialDrill:
         if (model, comm, error) != (777, 0, 0):
             raise RuntimeError(f'No healthy STS3215 at ID 8 on {self.path}.')
         self.identified = True
-        for mid in range(1, 8):
-            _, comm, _ = self.packet.ping(self.port, mid)
-            if comm == 0:
-                raise RuntimeError('Connect only the ID 8 drill to this USB bus.')
+        # IDs 1–6 may be connected on the same bus. All reads and writes below
+        # are unicast to ID 8; never configure, disable, or broadcast to joints.
 
     def read(self, address, size=1):
         fn = self.packet.read1ByteTxRx if size == 1 else self.packet.read2ByteTxRx

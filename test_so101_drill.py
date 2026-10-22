@@ -215,14 +215,14 @@ class SerialTests(unittest.TestCase):
         self.h.packet.write1ByteTxRx.assert_not_called()
         self.h.packet.write2ByteTxRx.assert_not_called()
 
-    def test_arm_bus_blocks_drill_setup_without_writes(self):
+    def test_arm_bus_is_allowed_but_only_drill_is_pinged(self):
         self.h.packet.ping.side_effect = lambda port, mid: (777, 0, 0)
         self.h.port.getBaudRate.return_value = 1000000
         sdk = SimpleNamespace(PortHandler=lambda path: self.h.port,
                               PacketHandler=lambda protocol: self.h.packet)
         with patch.dict('sys.modules', scservo_sdk=sdk), patch('fcntl.ioctl'):
-            with self.assertRaisesRegex(RuntimeError, 'only the ID 8 drill'):
-                self.h.open()
+            self.h.open()
+        self.h.packet.ping.assert_called_once_with(self.h.port, 8)
         self.h.close()
         self.h.packet.write1ByteTxRx.assert_not_called()
         self.h.packet.write2ByteTxRx.assert_not_called()
@@ -238,7 +238,7 @@ class SerialTests(unittest.TestCase):
         self.h.close()
         self.h.packet.write1ByteTxRx.assert_not_called()
 
-    def test_read_only_open_claims_port_and_checks_solo_motor(self):
+    def test_read_only_open_claims_port_and_checks_drill(self):
         self.h.packet.ping.side_effect = lambda port, mid: ((777, 0, 0) if mid == 8 else (0, -6, 0))
         self.h.port.getBaudRate.return_value = 1000000
         sdk = SimpleNamespace(PortHandler=lambda path: self.h.port,
@@ -249,6 +249,45 @@ class SerialTests(unittest.TestCase):
         self.h.close()
         self.h.packet.write1ByteTxRx.assert_not_called()
         self.h.packet.write2ByteTxRx.assert_not_called()
+
+    def test_setup_spin_reverse_and_stop_leave_arm_joint_registers_unchanged(self):
+        import copy
+        registers = {mid: {5: mid, 33: 0, 40: 1, 42: 1500 + mid, 46: 123}
+                     for mid in range(1, 9)}
+        before = copy.deepcopy(registers)
+        accesses = []
+
+        def write(port, mid, address, value):
+            accesses.append(('write', mid, address))
+            registers[mid][address] = value
+            return 0, 0
+
+        def read(port, mid, address):
+            accesses.append(('read', mid, address))
+            return registers[mid].get(address, 0), 0, 0
+
+        self.h.port.getBaudRate.return_value = 1000000
+        self.h.packet.ping.return_value = (777, 0, 0)
+        self.h.packet.write1ByteTxRx.side_effect = write
+        self.h.packet.write2ByteTxRx.side_effect = write
+        self.h.packet.read1ByteTxRx.side_effect = read
+        self.h.packet.read2ByteTxRx.side_effect = read
+        sdk = SimpleNamespace(PortHandler=lambda path: self.h.port,
+                              PacketHandler=lambda protocol: self.h.packet)
+        with patch.dict('sys.modules', scservo_sdk=sdk), patch('fcntl.ioctl'):
+            self.h.open()
+        self.h.prepare(lambda: None)
+        self.h.velocity(2000)
+        self.h.velocity(0)
+        self.h.velocity(-2000)
+        self.h.health()
+        self.h.close()
+        self.assertTrue(accesses)
+        self.assertTrue(all(mid == 8 for _, mid, _ in accesses))
+        self.assertTrue(all(registers[mid] == before[mid] for mid in range(1, 8)))
+        self.assertEqual(registers[8][46], 0)
+        self.assertEqual(registers[8][40], 0)
+        self.assertEqual(registers[8][5], 8)
 
     def test_failed_zero_still_attempts_torque_off_and_closes(self):
         self.h.claimed = True

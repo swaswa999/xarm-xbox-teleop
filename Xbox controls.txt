@@ -1,6 +1,7 @@
 Combined xArm + ID 8 drill
 Open "Start xArm + Drill.command" for both devices on one Xbox controller.
-Connect only the loose ID 8 drill motor to its USB controller.
+The ID 8 drill can share its USB bus with the entire SO-101 arm.
+Only ID 8 is addressed; SO-101 joint IDs 1–6 keep their existing settings.
 Menu enables both; wait for "Drill ready" before pressing the D-pad.
 Hold D-pad RIGHT = drill forward at 2000; LEFT = reverse at 2000.
 Release = stop drill. Both directions pressed = stop drill.
