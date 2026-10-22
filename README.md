@@ -6,6 +6,28 @@ After enabling the arm, use the sticks and buttons directly—**no A hold is req
 
 ![Xbox control window](docs/xbox-controls.png)
 
+## X6 arm demo: Xbox, drill, and camera
+
+The `x6-arm-demo` branch includes the X6 Xbox controls, the ID 8 drill driver,
+and the local tire/lug-nut tracker in [`vision/`](vision/README.md).
+
+1. Run **Setup xArm Xbox.command** once to prepare the robot controls.
+2. Open **Start Vision Tracker.command**. On first launch it installs the
+   camera tracker's dependencies in its own environment. Open
+   [the camera view](http://localhost:8766) in Chrome, enable the camera,
+   and select **Intel RealSense D435i RGB** (or another connected camera).
+3. Click **Freeze & select**, box the tire and each visible lug nut, then
+   **Start tracking**. This is manual initialization followed by tracking;
+   it does not recognize lug nuts automatically or use RealSense depth data.
+4. Open **Start xArm + Drill.command**. Follow the connection and enable steps
+   below. Keep the control window focused while operating the Xbox controller;
+   switching to the camera window disarms robot control and requires Menu again.
+
+The camera provides a visual aid. It does not command the robot or guide the
+drill automatically. Camera recordings, local environments, and machine-specific
+runtime files are excluded from Git. The tracker can also run independently;
+see its [setup and tests](vision/README.md).
+
 ## xArm + SO-101 drill on one Xbox controller
 
 Open **Start xArm + Drill.command** for the xArm 6 plus the standalone
@@ -127,7 +149,7 @@ All tests use fake robot objects; they do not operate a physical robot.
 ./xarm-venv/bin/python -m unittest test_xarm_xbox test_xarm_teleop test_so101_drill
 ```
 
-The 112 tests cover direct control without A, direction mapping, bounded targets, speed caps, gripper feedback, release/resume transitions, startup feedback timing, watchdogs, and stop priority.
+The 139 robot and drill tests cover direct control without A, direction mapping, bounded targets, speed caps, gripper feedback, release/resume transitions, startup feedback timing, watchdogs, shared-bus motor addressing, and stop priority. The camera tracker has a separate Python and Node test suite described in [its README](vision/README.md).
 
 macOS native input and robot operation were exercised on the original workstation. Other platforms use SDL input and have not been physically validated here.
 

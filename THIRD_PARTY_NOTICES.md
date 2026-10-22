@@ -23,3 +23,15 @@ Their source distributions and installed packages carry their own licenses:
 - https://github.com/pygame-community/pygame-ce
 
 Python environments and compiled helper binaries are not committed.
+
+## Bundled camera tracker
+
+The `vision/` directory contains the user's existing
+[Lugnut Tracker](https://github.com/swaswa999/lugnut-tracker), copied from
+revision `0b7998d06a3587f153340c91be4bc0b395961e21` for the X6 arm demo.
+Its source, tests, documentation, and launcher are included; footage,
+recordings, and installed dependencies are excluded.
+
+The tracker installs FastAPI, Uvicorn, websockets, OpenCV, and NumPy separately
+using `vision/requirements-live.txt`. Those installed distributions retain
+their own license notices.
